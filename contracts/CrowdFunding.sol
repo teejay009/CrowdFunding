@@ -1,48 +1,68 @@
-// SPDX-License-Identifier: MIT
-
+// SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.26;
 
-contract Crowdfunding {
-    address public owner;
-    uint256 public goal;
-    uint256 public raisedAmount;
-    mapping(address => uint256) public contributions;
-
-    constructor(uint256 _goal) {
-        owner = msg.sender;
-        goal = _goal;
+contract CrowdFunding {
+    struct Campaign {
+        
+        address owner;
+        string title;
+        string description;
+        uint256 fundingGoal;
+        uint256 deadline;
+        uint256 amountCollected;
+        string image;
+        bool paidOut;
+       
     }
 
-    receive() external payable {
-        contribute(msg.value);
+    mapping(uint256 => Campaign) public campaigns;
+
+    uint256 public numberOfCampaigns = 0;
+
+    function createCampaign(
+        address _owner,
+        string memory _title,
+        string memory _description,
+        uint256 _target,
+        uint256 _deadline,
+        string memory _image
+    ) public returns (uint256) {
+        Campaign storage campaign = campaigns[numberOfCampaigns];
+
+        require(
+            _deadline > block.timestamp,
+            "The deadline should be a date in the future."
+        );
+
+        campaign.owner = _owner;
+        campaign.title = _title;
+        campaign.description = _description;
+        campaign.fundingGoal = _target;
+        campaign.deadline = _deadline;
+        campaign.amountCollected = 0;
+        campaign.image = _image;
+
+        numberOfCampaigns++;
+
+        return numberOfCampaigns - 1;
     }
 
-    function contribute(uint256 _amount) public payable {
-        require(raisedAmount < goal, "Goal already reached");
-        require(_amount > 0, "Contribution amount must be greater than 0");
+    function payout(uint256 _id) public {
+        Campaign storage campaign = campaigns[_id];
 
-        uint256 remainingAmount = goal - raisedAmount;
-        uint256 contribution = _amount;
+        require(
+            msg.sender == campaign.owner,
+            "Only the campaign owner can withdraw funds"
+        );
+        require(!campaign.paidOut, "Funds already withdrawn");
 
-        if (contribution > remainingAmount) {
-            contribution = remainingAmount;
-        }
+        uint256 payoutAmount = campaign.amountCollected;
+        require(payoutAmount > 0, "No funds to withdraw");
 
-        contributions[msg.sender] += contribution;
-        raisedAmount += contribution;
+        campaign.amountCollected = 0;
+        campaign.paidOut = true;
 
-        if (raisedAmount >= goal) {
-            emit GoalReached();
-        }
+        (bool sent, ) = payable(campaign.owner).call{value: payoutAmount}("");
+        require(sent, "Failed to send funds to the campaign owner");
     }
-
-    function withdraw() public {
-        require(msg.sender == owner, "Only the owner can withdraw");
-        require(raisedAmount >= goal, "Goal not reached");
-
-        payable(owner).transfer(raisedAmount);
-        raisedAmount = 0;
-    }
-
-    event GoalReached();
 }
